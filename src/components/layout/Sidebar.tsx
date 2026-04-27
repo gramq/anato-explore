@@ -34,8 +34,8 @@ export function Sidebar() {
               to={to}
               className={`group flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium spring-hover ${
                 active
-                  ? "bg-primary/15 text-foreground shadow-[inset_0_0_0_1px_oklch(0.85_0.12_85_/_0.3)]"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  ? "bg-primary/12 text-primary shadow-[inset_0_0_0_1px_oklch(0.62_0.20_255_/_0.25)]"
+                  : "text-muted-foreground hover:text-foreground hover:bg-primary/5"
               }`}
             >
               <Icon className={`size-[18px] ${active ? "text-primary" : ""}`} strokeWidth={2} />
@@ -69,7 +69,7 @@ function Stat({ value, label, accent }: { value: string; label: string; accent: 
     accent: "text-accent",
   };
   return (
-    <div className="flex items-baseline justify-between rounded-2xl bg-white/[0.03] border border-white/5 px-4 py-3 spring-hover">
+    <div className="flex items-baseline justify-between rounded-2xl bg-primary/[0.04] border border-primary/10 px-4 py-3 spring-hover">
       <div className="flex items-center gap-2">
         <Layers className={`size-3.5 ${accentMap[accent]}`} />
         <span className="text-xs text-muted-foreground tracking-wide">{label}</span>

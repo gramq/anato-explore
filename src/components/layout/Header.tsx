@@ -19,8 +19,8 @@ export function Header() {
               to={to}
               className={`px-4 py-2 rounded-2xl text-sm font-medium tracking-tight transition-all duration-300 ${
                 active
-                  ? "bg-white/10 text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-white/5"
+                  ? "bg-primary/12 text-primary"
+                  : "text-muted-foreground hover:text-foreground hover:bg-primary/5"
               }`}
             >
               {label}
