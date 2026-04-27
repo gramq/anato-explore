@@ -38,7 +38,7 @@ function GlosarPage() {
   return (
     <div className="absolute inset-0 m-4 mt-2 rounded-3xl glass overflow-hidden flex flex-col">
       {/* Header */}
-      <div className="p-6 border-b border-white/5">
+      <div className="p-6 border-b border-primary/10">
         <div className="flex items-center gap-3 mb-2">
           <BookMarked className="size-5 text-primary" />
           <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground font-semibold">
@@ -70,8 +70,8 @@ function GlosarPage() {
               onClick={() => setActiveCat(c)}
               className={`px-3 py-1.5 rounded-full text-xs font-medium tracking-tight transition-all ${
                 activeCat === c
-                  ? "bg-primary text-primary-foreground"
-                  : "bg-white/5 text-muted-foreground hover:bg-white/10 hover:text-foreground"
+                  ? "bg-primary text-primary-foreground shadow-[var(--shadow-glow)]"
+                  : "bg-primary/5 text-muted-foreground hover:bg-primary/10 hover:text-foreground"
               }`}
             >
               {c === "toate" ? "Toate" : categoryLabels[c]}

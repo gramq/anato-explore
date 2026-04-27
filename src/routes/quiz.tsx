@@ -149,7 +149,7 @@ function QuizPage() {
                 Scor: {score}
               </span>
             </div>
-            <div className="h-1.5 rounded-full bg-white/5 overflow-hidden">
+            <div className="h-1.5 rounded-full bg-primary/10 overflow-hidden">
               <div
                 className="h-full bg-gradient-to-r from-primary to-bone-glow transition-all duration-500"
                 style={{ width: `${((idx + (picked !== null ? 1 : 0)) / questions.length) * 100}%` }}
@@ -187,17 +187,17 @@ function QuizPage() {
                             ? "bg-success/15 border-success/40"
                             : isPicked
                               ? "bg-destructive/15 border-destructive/40"
-                              : "bg-white/[0.02] border-white/5 opacity-60"
-                          : "bg-white/[0.03] border-white/8 hover:bg-white/[0.07] hover:border-white/20 spring-hover"
+                              : "bg-primary/[0.03] border-primary/10 opacity-60"
+                          : "bg-primary/[0.04] border-primary/12 hover:bg-primary/[0.08] hover:border-primary/25 spring-hover"
                       }`}
                     >
                       <span
                         className={`size-7 shrink-0 rounded-full flex items-center justify-center text-[11px] font-bold border ${
                           showAnswer && isCorrect
-                            ? "bg-success text-background border-transparent"
+                            ? "bg-success text-white border-transparent"
                             : showAnswer && isPicked
                               ? "bg-destructive text-destructive-foreground border-transparent"
-                              : "border-white/15 text-muted-foreground"
+                              : "border-primary/25 text-muted-foreground"
                         }`}
                       >
                         {showAnswer && isCorrect ? (

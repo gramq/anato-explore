@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
-import { Canvas, useFrame, type ThreeEvent } from "@react-three/fiber";
+import { Canvas, useFrame, useLoader, type ThreeEvent } from "@react-three/fiber";
 import { OrbitControls, Environment, ContactShadows, Html, useGLTF } from "@react-three/drei";
 import * as THREE from "three";
+import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 
 // Map submesh node names → bone IDs from src/data/bones.ts
 // Derived from bounding-box analysis of skeleton.glb (Y-up, ~183cm tall).
@@ -27,38 +28,96 @@ const MESH_TO_BONE: Record<string, string> = {
   SM_HumanSkeleton_02: "carp",           // mână stângă
 };
 
-const MODEL_URL = "/skeleton.glb";
-useGLTF.preload(MODEL_URL);
+// Two-model setup: male on the left, female on the right.
+// Falls back to the existing skeleton.glb when dedicated files are missing.
+const MALE_URL = "/skeleton_male.glb";
+const FEMALE_URL = "/skeleton_female.glb";
+const FALLBACK_URL = "/skeleton.glb";
 
-const BASE_COLOR = new THREE.Color("#f0e6d2");
-const HOVER_COLOR = new THREE.Color("#fff2c4");
-const SELECT_COLOR = new THREE.Color("#f5d76e");
+useGLTF.preload(FALLBACK_URL);
+
+const BASE_COLOR = new THREE.Color("#fbf6e9");      // clean warm bone
+const HOVER_COLOR = new THREE.Color("#cfe5ff");     // soft medical blue
+const SELECT_COLOR = new THREE.Color("#007aff");    // Apple system blue
 
 interface SkeletonModelProps {
+  url: string;
+  fallbackUrl?: string;
+  xOffset: number;
+  label: string;
   selectedBoneId: string | null;
   hoveredBoneId: string | null;
   setHoveredBone: (id: string | null) => void;
   onSelectBone: (id: string | null) => void;
 }
 
+function useGLTFWithFallback(url: string, fallback: string) {
+  // Probe the requested URL once; if it 404s, swap to the fallback.
+  const [resolvedUrl, setResolvedUrl] = useState<string | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    fetch(url, { method: "HEAD" })
+      .then((r) => {
+        if (cancelled) return;
+        setResolvedUrl(r.ok ? url : fallback);
+      })
+      .catch(() => !cancelled && setResolvedUrl(fallback));
+    return () => {
+      cancelled = true;
+    };
+  }, [url, fallback]);
+  return resolvedUrl;
+}
+
 function SkeletonModel({
+  url,
+  fallbackUrl,
+  xOffset,
+  label,
   selectedBoneId,
   hoveredBoneId,
   setHoveredBone,
   onSelectBone,
 }: SkeletonModelProps) {
-  const { scene } = useGLTF(MODEL_URL);
+  const resolvedUrl = useGLTFWithFallback(url, fallbackUrl ?? url);
+  if (!resolvedUrl) return null;
+  return (
+    <ResolvedSkeletonModel
+      url={resolvedUrl}
+      xOffset={xOffset}
+      label={label}
+      selectedBoneId={selectedBoneId}
+      hoveredBoneId={hoveredBoneId}
+      setHoveredBone={setHoveredBone}
+      onSelectBone={onSelectBone}
+    />
+  );
+}
+
+interface ResolvedProps extends Omit<SkeletonModelProps, "url" | "fallbackUrl"> {
+  url: string;
+}
+
+function ResolvedSkeletonModel({
+  url,
+  xOffset,
+  label,
+  selectedBoneId,
+  hoveredBoneId,
+  setHoveredBone,
+  onSelectBone,
+}: ResolvedProps) {
+  const gltf = useLoader(GLTFLoader, url);
   const groupRef = useRef<THREE.Group>(null);
 
   // Clone once so per-instance materials don't leak across remounts
   const cloned = useMemo(() => {
-    const root = scene.clone(true);
+    const root = gltf.scene.clone(true);
     root.traverse((obj) => {
       if ((obj as THREE.Mesh).isMesh) {
         const mesh = obj as THREE.Mesh;
         mesh.castShadow = true;
         mesh.receiveShadow = true;
-        // Walk up to find the named SM_HumanSkeleton_NN parent
         let cur: THREE.Object3D | null = obj;
         let boneId: string | null = null;
         while (cur) {
@@ -69,28 +128,26 @@ function SkeletonModel({
           }
           cur = cur.parent;
         }
-        // Hide the OutLine pass (cosmetic black silhouette) so it doesn't block picks
         if (mesh.name.toLowerCase().includes("outline") || (cur && cur.name.toLowerCase().includes("outline"))) {
           mesh.visible = false;
           mesh.userData.boneId = null;
           return;
         }
         mesh.userData.boneId = boneId;
-        // Replace material with our themed standard material so highlight works
         const mat = new THREE.MeshStandardMaterial({
           color: BASE_COLOR.clone(),
-          roughness: 0.5,
-          metalness: 0.05,
+          roughness: 0.42,
+          metalness: 0.04,
           emissive: SELECT_COLOR.clone(),
           emissiveIntensity: 0,
+          envMapIntensity: 1.1,
         });
         mesh.material = mat;
       }
     });
     return root;
-  }, [scene]);
+  }, [gltf]);
 
-  // Animate highlight per frame
   useFrame(() => {
     cloned.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
@@ -100,26 +157,24 @@ function SkeletonModel({
       const mat = mesh.material as THREE.MeshStandardMaterial;
       const isSelected = boneId === selectedBoneId;
       const isHovered = !isSelected && boneId === hoveredBoneId;
-      const targetEmissive = isSelected ? 0.85 : isHovered ? 0.25 : 0;
+      const targetEmissive = isSelected ? 0.7 : isHovered ? 0.18 : 0;
       mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.15;
       const targetColor = isSelected ? SELECT_COLOR : isHovered ? HOVER_COLOR : BASE_COLOR;
       mat.color.lerp(targetColor, 0.15);
     });
 
-    // Slow idle rotation while nothing is selected
     if (groupRef.current && !selectedBoneId) {
-      groupRef.current.rotation.y += 0.0015;
+      groupRef.current.rotation.y += 0.0012;
     }
   });
 
-  // Center + scale the model to a comfortable viewing size
   const { scale, offset } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
-    const targetHeight = 5.5;
+    const targetHeight = 5.2;
     const s = targetHeight / (size.y || 1);
     return {
       scale: s,
@@ -144,20 +199,23 @@ function SkeletonModel({
     const id = (e.object.userData?.boneId as string | null) ?? null;
     if (id) onSelectBone(id);
   };
-  const handleMissed = () => {
-    onSelectBone(null);
-  };
 
   return (
     <group
       ref={groupRef}
+      position={[xOffset, 0, 0]}
       scale={scale}
       onPointerOver={handlePointerOver}
       onPointerOut={handlePointerOut}
       onClick={handleClick}
-      onPointerMissed={handleMissed}
     >
       <primitive object={cloned} position={offset} />
+      {/* Floor label */}
+      <Html position={[0, -3.2 / scale, 0]} center distanceFactor={10} zIndexRange={[10, 0]}>
+        <div className="px-3 py-1 rounded-full bg-white/80 border border-primary/15 backdrop-blur-md text-[10px] tracking-[0.22em] uppercase font-bold text-primary shadow-[0_4px_12px_-4px_oklch(0.62_0.20_255_/_0.25)]">
+          {label}
+        </div>
+      </Html>
     </group>
   );
 }
@@ -165,8 +223,8 @@ function SkeletonModel({
 function LoadingFallback() {
   return (
     <Html center>
-      <div className="text-bone text-sm font-medium tracking-wide animate-pulse">
-        Se încarcă scheletul…
+      <div className="text-primary text-sm font-medium tracking-wide animate-pulse">
+        Se încarcă scheletele…
       </div>
     </Html>
   );
@@ -180,50 +238,74 @@ interface SkeletonSceneProps {
 export function SkeletonScene({ selectedBoneId, onSelectBone }: SkeletonSceneProps) {
   const [hoveredBoneId, setHoveredBoneId] = useState<string | null>(null);
 
-  // Reset cursor on unmount
   useEffect(() => () => { document.body.style.cursor = "auto"; }, []);
+
+  const handleMissed = () => {
+    onSelectBone(null);
+  };
 
   return (
     <Canvas
       shadows
-      camera={{ position: [0, 0.5, 7], fov: 38 }}
+      camera={{ position: [0, 0.8, 9.5], fov: 40 }}
       gl={{ antialias: true, alpha: true }}
+      onPointerMissed={handleMissed}
     >
-      <color attach="background" args={["#15171f"]} />
-      <fog attach="fog" args={["#15171f", 9, 20]} />
+      {/* Bright clinical white background */}
+      <color attach="background" args={["#f8fafc"]} />
+      <fog attach="fog" args={["#f8fafc", 14, 28]} />
 
-      <ambientLight intensity={0.45} />
+      {/* High-intensity clinical lighting */}
+      <ambientLight intensity={0.9} />
+      <hemisphereLight args={["#ffffff", "#dbeafe", 0.6]} />
       <directionalLight
-        position={[5, 8, 5]}
-        intensity={1.2}
+        position={[6, 10, 6]}
+        intensity={1.6}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
+        shadow-bias={-0.0005}
       />
-      <directionalLight position={[-5, 3, -5]} intensity={0.4} color="#7eb5ff" />
-      <pointLight position={[0, 2, 4]} intensity={0.3} color="#f5d76e" />
+      <directionalLight position={[-6, 6, -4]} intensity={0.7} color="#ffffff" />
+      <pointLight position={[0, 3, 5]} intensity={0.5} color="#cfe5ff" />
 
       <Suspense fallback={<LoadingFallback />}>
         <SkeletonModel
+          url={MALE_URL}
+          fallbackUrl={FALLBACK_URL}
+          xOffset={-1.7}
+          label="Masculin"
+          selectedBoneId={selectedBoneId}
+          hoveredBoneId={hoveredBoneId}
+          setHoveredBone={setHoveredBoneId}
+          onSelectBone={onSelectBone}
+        />
+        <SkeletonModel
+          url={FEMALE_URL}
+          fallbackUrl={FALLBACK_URL}
+          xOffset={1.7}
+          label="Feminin"
           selectedBoneId={selectedBoneId}
           hoveredBoneId={hoveredBoneId}
           setHoveredBone={setHoveredBoneId}
           onSelectBone={onSelectBone}
         />
         <ContactShadows
-          position={[0, -3, 0]}
-          opacity={0.45}
-          scale={9}
-          blur={2.6}
-          far={4}
+          position={[0, -2.85, 0]}
+          opacity={0.35}
+          scale={14}
+          blur={2.8}
+          far={5}
+          color="#1e3a8a"
         />
-        <Environment preset="city" />
+        {/* White studio environment for clean reflections on bone */}
+        <Environment preset="studio" environmentIntensity={0.9} />
       </Suspense>
 
       <OrbitControls
         enablePan={false}
-        minDistance={4}
-        maxDistance={12}
+        minDistance={5}
+        maxDistance={16}
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 1.6}
         target={[0, 0, 0]}
