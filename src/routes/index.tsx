@@ -1,26 +1,56 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { useMemo, useState } from "react";
+import { SkeletonScene } from "@/components/skeleton/SkeletonScene";
+import { BoneInfoPanel } from "@/components/skeleton/BoneInfoPanel";
+import { ReferencesButton } from "@/components/layout/ReferencesButton";
+import { bones } from "@/data/bones";
+import { MousePointerClick } from "lucide-react";
 
 export const Route = createFileRoute("/")({
-  component: Index,
+  head: () => ({
+    meta: [
+      { title: "Explorator Schelet 3D — InfoMed 3D" },
+      {
+        name: "description",
+        content:
+          "Explorează scheletul uman în 3D. Click pe orice os pentru a-i descoperi anatomia, funcția și descrierea în limba română.",
+      },
+      { property: "og:title", content: "Explorator Schelet 3D — InfoMed 3D" },
+      {
+        property: "og:description",
+        content: "Vizualizare interactivă 3D a celor 206 oase ale corpului uman.",
+      },
+    ],
+  }),
+  component: ExploratorPage,
 });
 
-// IMPORTANT: Replace this placeholder. For sites with multiple pages (About, Services, Contact, etc.),
-// create separate route files (about.tsx, services.tsx, contact.tsx) — don't put all pages in this file.
-function PlaceholderIndex() {
+function ExploratorPage() {
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const selectedBone = useMemo(
+    () => bones.find((b) => b.id === selectedId) ?? null,
+    [selectedId],
+  );
+
   return (
-    <div
-      className="flex min-h-screen items-center justify-center"
-      style={{ backgroundColor: "#fcfbf8" }}
-    >
-      <img
-        data-lovable-blank-page-placeholder="REMOVE_THIS"
-        src="https://cdn.gpteng.co/blank-app-v1.svg"
-        alt="Your app will live here!"
+    <div className="absolute inset-0 m-4 mt-2 rounded-3xl overflow-hidden glass">
+      <SkeletonScene
+        selectedBoneId={selectedId}
+        onSelectBone={setSelectedId}
       />
+
+      {/* Hint bottom-left when nothing selected */}
+      {!selectedBone && (
+        <div className="absolute left-6 top-6 glass rounded-2xl px-4 py-3 flex items-center gap-2.5 fade-up">
+          <MousePointerClick className="size-4 text-primary" />
+          <span className="text-xs text-muted-foreground tracking-tight">
+            Apasă pe un os pentru detalii
+          </span>
+        </div>
+      )}
+
+      <BoneInfoPanel bone={selectedBone} onClose={() => setSelectedId(null)} />
+      <ReferencesButton />
     </div>
   );
-}
-
-function Index() {
-  return <PlaceholderIndex />;
 }
