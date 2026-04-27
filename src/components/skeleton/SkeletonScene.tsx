@@ -22,7 +22,8 @@ interface BonePartProps {
 
 function BonePart({ partId, position, rotation = [0, 0, 0], geometry, selectedId, hoveredId, setHovered, onSelect }: BonePartProps) {
   const meshRef = useRef<THREE.Mesh>(null);
-  const isSelected = selectedId === partId;
+  const baseId = partId.replace(/-[lr]$/, "").replace(/-\d+$/, "");
+  const isSelected = selectedId === baseId;
   const isHovered = hoveredId === partId;
 
   useFrame(() => {
