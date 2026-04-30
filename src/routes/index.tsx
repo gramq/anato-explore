@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useMemo, useState } from "react";
-import { SkeletonScene } from "@/components/skeleton/SkeletonScene";
+import { SkeletonScene, type BoneSelection } from "@/components/skeleton/SkeletonScene";
 import { BoneInfoPanel } from "@/components/skeleton/BoneInfoPanel";
 import { ReferencesButton } from "@/components/layout/ReferencesButton";
 import { bones } from "@/data/bones";
@@ -26,20 +26,16 @@ export const Route = createFileRoute("/")({
 });
 
 function ExploratorPage() {
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selection, setSelection] = useState<BoneSelection | null>(null);
   const selectedBone = useMemo(
-    () => bones.find((b) => b.id === selectedId) ?? null,
-    [selectedId],
+    () => (selection ? bones.find((b) => b.id === selection.id) ?? null : null),
+    [selection],
   );
 
   return (
     <div className="absolute inset-0 m-4 mt-2 rounded-3xl overflow-hidden glass">
-      <SkeletonScene
-        selectedBoneId={selectedId}
-        onSelectBone={setSelectedId}
-      />
+      <SkeletonScene selection={selection} onSelect={setSelection} />
 
-      {/* Hint bottom-left when nothing selected */}
       {!selectedBone && (
         <div className="absolute left-6 top-6 glass rounded-2xl px-4 py-3 flex items-center gap-2.5 fade-up">
           <MousePointerClick className="size-4 text-primary" />
@@ -49,7 +45,7 @@ function ExploratorPage() {
         </div>
       )}
 
-      <BoneInfoPanel bone={selectedBone} onClose={() => setSelectedId(null)} />
+      <BoneInfoPanel bone={selectedBone} onClose={() => setSelection(null)} />
       <ReferencesButton />
     </div>
   );
