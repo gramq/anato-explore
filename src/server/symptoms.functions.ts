@@ -2,9 +2,10 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 
 const InputSchema = z.object({
-  boneName: z.string().min(1).max(120),
-  boneLatin: z.string().min(0).max(120).optional().default(""),
-  boneDescription: z.string().min(0).max(1000).optional().default(""),
+  structureName: z.string().min(1).max(120),
+  structureLatin: z.string().min(0).max(120).optional().default(""),
+  structureDescription: z.string().min(0).max(1000).optional().default(""),
+  tissueType: z.enum(["os", "muschi", "tendon"]).default("os"),
   symptoms: z.string().min(3).max(800),
 });
 
@@ -15,6 +16,12 @@ const ResponseSchema = z.object({
 
 export type SymptomAnalysis = z.infer<typeof ResponseSchema>;
 
+const TISSUE_LABEL: Record<"os" | "muschi" | "tendon", string> = {
+  os: "țesut osos (sistem scheletal)",
+  muschi: "țesut muscular (sistem muscular striat)",
+  tendon: "tendon / țesut conjunctiv fibros",
+};
+
 export const analyzeSymptoms = createServerFn({ method: "POST" })
   .inputValidator((input: unknown) => InputSchema.parse(input))
   .handler(async ({ data }): Promise<SymptomAnalysis> => {
@@ -23,14 +30,17 @@ export const analyzeSymptoms = createServerFn({ method: "POST" })
       throw new Error("LOVABLE_API_KEY nu este configurat.");
     }
 
-    const systemPrompt = `Ești un asistent medical educațional care analizează simptome legate de un os specific din corpul uman. Răspunzi DOAR în limba română, cu diacritice. Oferi informații generale, NU diagnostice medicale reale. Răspunsul trebuie să fie specific osului indicat și simptomelor descrise.`;
+    const tissueLabel = TISSUE_LABEL[data.tissueType];
 
-    const userPrompt = `Os selectat: ${data.boneName}${data.boneLatin ? ` (${data.boneLatin})` : ""}
-Context anatomic: ${data.boneDescription || "n/a"}
+    const systemPrompt = `Ești un asistent medical educațional care analizează simptome legate de o structură anatomică specifică. Răspunzi DOAR în limba română, cu diacritice. Oferi informații generale, NU diagnostice medicale reale. Adaptezi răspunsul în funcție de tipul de țesut: pentru os te referi la patologii scheletale (fracturi, artroză, osteoporoză), pentru mușchi la patologii musculare (întinderi, crampe, contracturi, miozită), iar pentru tendon la tendinopatii (tendinită, ruptură, entezită). Răspunsul trebuie să fie specific structurii indicate și simptomelor descrise.`;
+
+    const userPrompt = `Structură selectată: ${data.structureName}${data.structureLatin ? ` (${data.structureLatin})` : ""}
+Tip țesut: ${tissueLabel}
+Context anatomic: ${data.structureDescription || "n/a"}
 
 Simptome descrise de utilizator: "${data.symptoms}"
 
-Returnează 2-3 posibile cauze plauzibile și o recomandare practică (specialist + măsuri imediate).`;
+Returnează 2-3 posibile cauze plauzibile (SPECIFICE pentru ${tissueLabel}) și o recomandare practică (specialist + măsuri imediate).`;
 
     const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
@@ -56,7 +66,7 @@ Returnează 2-3 posibile cauze plauzibile și o recomandare practică (specialis
                   cauze: {
                     type: "array",
                     items: { type: "string" },
-                    description: "2-3 cauze posibile (ex: inflamație, postură incorectă).",
+                    description: "2-3 cauze posibile, specifice tipului de țesut.",
                   },
                   recomandare: {
                     type: "string",
