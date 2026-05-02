@@ -2,7 +2,7 @@ import { Link, useLocation } from "@tanstack/react-router";
 
 const links = [
   { to: "/", label: "Explorator" },
-  { to: "/glosar", label: "Glosar" },
+  { to: "/glosar", label: "Bibliotecă" },
   { to: "/quiz", label: "Quiz" },
 ] as const;
 
@@ -28,11 +28,6 @@ export function Header() {
           );
         })}
       </nav>
-
-      <div className="ml-auto flex items-center gap-2 rounded-full bg-success/15 border border-success/30 px-3 py-1.5">
-        <span className="size-2 rounded-full bg-success pulse-live" />
-        <span className="text-[11px] font-bold tracking-[0.18em] text-success">LIVE</span>
-      </div>
     </header>
   );
 }

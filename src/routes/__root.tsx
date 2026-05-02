@@ -31,17 +31,17 @@ export const Route = createRootRoute({
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "InfoMed 3D — Explorator Anatomie Umană" },
+      { title: "Santix — Explorator Anatomie Umană" },
       {
         name: "description",
         content:
-          "Aplicație medicală interactivă pentru explorarea scheletului uman în 3D. Glosar anatomic și quiz-uri în limba română.",
+          "Aplicație medicală interactivă pentru explorarea anatomiei umane în 3D. Bibliotecă anatomică și quiz-uri în limba română.",
       },
-      { name: "author", content: "InfoMed 3D" },
-      { property: "og:title", content: "InfoMed 3D — Explorator Anatomie Umană" },
+      { name: "author", content: "Santix" },
+      { property: "og:title", content: "Santix — Explorator Anatomie Umană" },
       {
         property: "og:description",
-        content: "Schelet 3D interactiv, glosar anatomic complet și teste rapide pentru studenți și pasionați de medicină.",
+        content: "Anatomie 3D interactivă, bibliotecă anatomică și teste rapide pentru studenți și pasionați de medicină.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },

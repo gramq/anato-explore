@@ -6,12 +6,12 @@ import { Brain, Check, RotateCcw, Sparkles, X } from "lucide-react";
 export const Route = createFileRoute("/quiz")({
   head: () => ({
     meta: [
-      { title: "Test Rapid — InfoMed 3D" },
+      { title: "Test Rapid — Santix" },
       {
         name: "description",
         content: "Testează-ți cunoștințele de anatomie cu întrebări mixte: alegere multiplă și identificare în 3D.",
       },
-      { property: "og:title", content: "Test Rapid de Anatomie — InfoMed 3D" },
+      { property: "og:title", content: "Test Rapid de Anatomie — Santix" },
       { property: "og:description", content: "Quiz interactiv despre oasele corpului uman." },
     ],
   }),
