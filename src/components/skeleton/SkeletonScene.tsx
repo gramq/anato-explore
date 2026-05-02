@@ -31,12 +31,12 @@ const MESH_TO_BONE: Record<string, string> = {
 const MALE_COMPLEX_URL = "/anatomy/z-anatomy-musculoskeletal.glb?v=20260502-selection-2";
 const FALLBACK_URL = "/skeleton.glb";
 
-// Preload the heavy male anatomy model so it doesn't block first paint of the page.
-useGLTF.preload(MALE_COMPLEX_URL);
+// Keep first paint light. The complex anatomy GLB is loaded only after the user opts in.
 useGLTF.preload(FALLBACK_URL);
 
 export type SkeletonSide = "male" | "female";
 export type TissueType = "os" | "muschi" | "tendon";
+export type AnatomyModelMode = "simple" | "complex";
 
 export interface BoneSelection {
   /** Bone id from src/data/bones.ts when known, otherwise a synthetic id (e.g. "muschi-grup-2"). */
@@ -456,9 +456,10 @@ interface SkeletonSceneProps {
   selection: BoneSelection | null;
   onSelect: (sel: BoneSelection | null) => void;
   layers: LayersState;
+  mode: AnatomyModelMode;
 }
 
-export function SkeletonScene({ selection, onSelect, layers }: SkeletonSceneProps) {
+export function SkeletonScene({ selection, onSelect, layers, mode }: SkeletonSceneProps) {
   useEffect(() => () => { document.body.style.cursor = "auto"; }, []);
 
   return (
@@ -486,13 +487,25 @@ export function SkeletonScene({ selection, onSelect, layers }: SkeletonSceneProp
       <pointLight position={[0, 2.5, 5]} intensity={0.22} color="#ffffff" />
 
       <Suspense fallback={<LoadingFallback />}>
-        <ComplexMaleModel
-          url={MALE_COMPLEX_URL}
-          xOffset={0}
-          layers={layers}
-          selection={selection}
-          onSelect={onSelect}
-        />
+        {mode === "complex" ? (
+          <ComplexMaleModel
+            url={MALE_COMPLEX_URL}
+            xOffset={0}
+            layers={layers}
+            selection={selection}
+            onSelect={onSelect}
+          />
+        ) : (
+          <SimpleSkeletonModel
+            url={FALLBACK_URL}
+            xOffset={0}
+            label="Mod rapid"
+            side="male"
+            variant="matte"
+            selection={selection}
+            onSelect={onSelect}
+          />
+        )}
         <ContactShadows
           position={[0, -2.9, 0]}
           opacity={0.22}
