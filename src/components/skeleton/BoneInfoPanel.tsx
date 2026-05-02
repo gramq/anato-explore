@@ -1,82 +1,30 @@
 import { useEffect, useState } from "react";
 import { type Bone, categoryLabels } from "@/data/bones";
-import { X, BookMarked, Sparkles, Stethoscope, Loader2, AlertTriangle, Activity, Layers } from "lucide-react";
+import { X, BookMarked, Sparkles, Stethoscope, Loader2, AlertTriangle } from "lucide-react";
 import { useServerFn } from "@tanstack/react-start";
 import { analyzeSymptoms, type SymptomAnalysis } from "@/server/symptoms.functions";
-import type { BoneSelection, TissueType } from "./SkeletonScene";
 
 interface Props {
   bone: Bone | null;
-  selection: BoneSelection | null;
   onClose: () => void;
 }
 
-const TISSUE_META: Record<TissueType, { label: string; Icon: typeof BookMarked; tagBg: string; tagText: string }> = {
-  os: {
-    label: "Țesut osos",
-    Icon: BookMarked,
-    tagBg: "bg-primary/15 border-primary/25",
-    tagText: "text-primary",
-  },
-  muschi: {
-    label: "Țesut muscular",
-    Icon: Activity,
-    tagBg: "bg-[oklch(0.55_0.18_25_/_0.12)] border-[oklch(0.55_0.18_25_/_0.3)]",
-    tagText: "text-[oklch(0.50_0.18_25)]",
-  },
-  tendon: {
-    label: "Tendon / țesut conjunctiv",
-    Icon: Layers,
-    tagBg: "bg-accent/15 border-accent/30",
-    tagText: "text-accent-foreground",
-  },
-};
-
-export function BoneInfoPanel({ bone, selection, onClose }: Props) {
+export function BoneInfoPanel({ bone, onClose }: Props) {
   const analyzeFn = useServerFn(analyzeSymptoms);
   const [symptoms, setSymptoms] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState<SymptomAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset assistant state whenever the selected bone changes
   useEffect(() => {
     setSymptoms("");
     setResult(null);
     setError(null);
     setLoading(false);
-  }, [selection?.id, selection?.side]);
+  }, [bone?.id]);
 
-  if (!selection) return null;
-
-  const tissue = selection.tissue;
-  const meta = TISSUE_META[tissue];
-  const Icon = meta.Icon;
-
-  // Resolve display strings — bones come from the catalog, muscles/tendons use the selection label.
-  const displayName = bone?.name ?? selection.label ?? "Structură anatomică";
-  const displayLatin = bone?.latin ?? (tissue === "muschi" ? "Musculus" : tissue === "tendon" ? "Tendo" : "");
-  const categoryText = bone ? categoryLabels[bone.category] : meta.label;
-  const description =
-    bone?.description ??
-    (tissue === "muschi"
-      ? "Grup muscular din anatomia masculină. Mușchii produc mișcare prin contracție și se atașează de oase prin tendoane."
-      : tissue === "tendon"
-        ? "Țesut conjunctiv fibros care leagă mușchii de oase și transmite forța contracției musculare."
-        : "Structură osoasă din scheletul uman.");
-  const funcText =
-    bone?.funcție ??
-    (tissue === "muschi"
-      ? "Generează mișcare, susține postura și protejează structurile interne."
-      : tissue === "tendon"
-        ? "Transferă forța de la mușchi la os și stabilizează articulațiile."
-        : "Susține corpul și protejează organele.");
-
-  const placeholder =
-    tissue === "muschi"
-      ? "Ex: simt o crampă, mă doare la efort, am întins mușchiul…"
-      : tissue === "tendon"
-        ? "Ex: durere ascuțită la mișcare, inflamație, senzație de arsură…"
-        : "Ex: mă doare când urc scările, simt o înțepătură ascuțită…";
+  if (!bone) return null;
 
   const canSubmit = symptoms.trim().length >= 3 && !loading;
 
@@ -88,10 +36,9 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
     try {
       const res = await analyzeFn({
         data: {
-          structureName: displayName,
-          structureLatin: displayLatin || undefined,
-          structureDescription: description,
-          tissueType: tissue,
+          boneName: bone.name,
+          boneLatin: bone.latin,
+          boneDescription: bone.description,
           symptoms: symptoms.trim(),
         },
       });
@@ -105,20 +52,17 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
 
   return (
     <div
-      key={`${selection.side}-${selection.id}`}
+      key={bone.id}
       className="absolute right-6 top-6 bottom-24 w-[360px] glass-strong rounded-3xl p-6 flex flex-col fade-up overflow-hidden"
     >
       <div className="flex items-start justify-between gap-3 mb-5">
         <div className="flex items-center gap-2">
-          <div className={`size-10 rounded-2xl border flex items-center justify-center ${meta.tagBg}`}>
-            <Icon className={`size-4 ${meta.tagText}`} />
+          <div className="size-10 rounded-2xl bg-primary/15 border border-primary/25 flex items-center justify-center">
+            <BookMarked className="size-4 text-primary" />
           </div>
-          <div className="flex flex-col">
-            <span className={`text-[10px] tracking-[0.22em] uppercase font-semibold ${meta.tagText}`}>
-              {meta.label}
-            </span>
-            <span className="text-[10px] tracking-wide text-muted-foreground">{categoryText}</span>
-          </div>
+          <span className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground font-semibold">
+            {categoryLabels[bone.category]}
+          </span>
         </div>
         <button
           onClick={onClose}
@@ -129,26 +73,25 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
         </button>
       </div>
 
-      <h2 className="text-3xl font-bold tracking-tight leading-tight mb-1">{displayName}</h2>
-      {displayLatin && <p className="text-sm italic text-muted-foreground mb-5">{displayLatin}</p>}
+      <h2 className="text-3xl font-bold tracking-tight leading-tight mb-1">{bone.name}</h2>
+      <p className="text-sm italic text-muted-foreground mb-5">{bone.latin}</p>
 
-      {bone && (
-        <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-2xl bg-bone-glow/10 border border-bone-glow/20 w-fit">
-          <Sparkles className="size-3.5 text-primary" />
-          <span className="text-xs font-semibold text-primary">
-            {bone.count} {bone.count === 1 ? "exemplar" : "exemplare"} în corp
-          </span>
-        </div>
-      )}
+      <div className="flex items-center gap-2 mb-5 px-3 py-2 rounded-2xl bg-bone-glow/10 border border-bone-glow/20 w-fit">
+        <Sparkles className="size-3.5 text-primary" />
+        <span className="text-xs font-semibold text-primary">
+          {bone.count} {bone.count === 1 ? "exemplar" : "exemplare"} în corp
+        </span>
+      </div>
 
       <div className="space-y-4 overflow-y-auto pr-1 flex-1 -mr-1">
         <Section title="Descriere">
-          <p className="text-sm leading-relaxed text-foreground/90">{description}</p>
+          <p className="text-sm leading-relaxed text-foreground/90">{bone.description}</p>
         </Section>
         <Section title="Funcție">
-          <p className="text-sm leading-relaxed text-foreground/90">{funcText}</p>
+          <p className="text-sm leading-relaxed text-foreground/90">{bone.funcție}</p>
         </Section>
 
+        {/* AI Symptom Assistant */}
         <div className="pt-3 mt-1 border-t border-primary/10">
           <div className="flex items-center gap-2 mb-3">
             <div className="size-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_4px_12px_-4px_oklch(0.62_0.20_255_/_0.45)]">
@@ -157,7 +100,7 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
             <div>
               <h3 className="text-sm font-bold tracking-tight">Asistent Simptome AI</h3>
               <p className="text-[11px] text-muted-foreground">
-                Specific pentru {meta.label.toLowerCase()} · {displayName.toLowerCase()}
+                Specific pentru {bone.name.toLowerCase()}
               </p>
             </div>
           </div>
@@ -171,7 +114,7 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
             disabled={loading}
             maxLength={800}
             rows={3}
-            placeholder={placeholder}
+            placeholder="Ex: mă doare când urc scările, simt o înțepătură ascuțită…"
             className="w-full resize-none rounded-2xl bg-white border border-primary/15 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all disabled:opacity-60"
           />
 
