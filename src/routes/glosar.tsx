@@ -6,12 +6,12 @@ import { Search, BookMarked, Filter } from "lucide-react";
 export const Route = createFileRoute("/glosar")({
   head: () => ({
     meta: [
-      { title: "Glosar Medical — InfoMed 3D" },
+      { title: "Bibliotecă anatomică — Santix" },
       {
         name: "description",
-        content: "Glosar complet al celor 206 oase ale corpului uman, cu denumire latină, descriere și funcție.",
+        content: "Bibliotecă anatomică a structurilor corpului uman, cu denumire latină, descriere și funcție.",
       },
-      { property: "og:title", content: "Glosar Medical — InfoMed 3D" },
+      { property: "og:title", content: "Bibliotecă anatomică — Santix" },
       { property: "og:description", content: "Toate oasele corpului uman, organizate pe regiuni anatomice." },
     ],
   }),
@@ -45,7 +45,7 @@ function GlosarPage() {
             Bibliotecă anatomică
           </span>
         </div>
-        <h1 className="text-4xl font-bold tracking-tight">Glosar <span className="text-gradient-bone">Medical</span></h1>
+        <h1 className="text-4xl font-bold tracking-tight">Bibliotecă <span className="text-gradient-bone">anatomică</span></h1>
         <p className="text-sm text-muted-foreground mt-2">
           {totalBoneCount} oase catalogate · {bones.length} categorii anatomice
         </p>

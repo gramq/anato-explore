@@ -1,8 +1,15 @@
 import { useEffect, useState } from "react";
 import { type Bone, categoryLabels } from "@/data/bones";
-import { X, BookMarked, Sparkles, Stethoscope, Loader2, AlertTriangle, Activity, Layers } from "lucide-react";
-import { useServerFn } from "@tanstack/react-start";
-import { analyzeSymptoms, type SymptomAnalysis } from "@/server/symptoms.functions";
+import { X, BookMarked, Sparkles, Stethoscope, AlertTriangle, Activity, Layers } from "lucide-react";
+import {
+  analyzePainLocally,
+  getPainQuestions,
+  painLevels,
+  validateAnswerConsistency,
+  validateSymptomRelevance,
+  type SymptomAnalysis,
+} from "@/data/painKnowledge";
+import { classifyAnatomyStructure } from "@/data/anatomyCurriculum";
 import type { BoneSelection, TissueType } from "./SkeletonScene";
 
 interface Props {
@@ -33,17 +40,16 @@ const TISSUE_META: Record<TissueType, { label: string; Icon: typeof BookMarked; 
 };
 
 export function BoneInfoPanel({ bone, selection, onClose }: Props) {
-  const analyzeFn = useServerFn(analyzeSymptoms);
   const [symptoms, setSymptoms] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<SymptomAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     setSymptoms("");
+    setAnswers({});
     setResult(null);
     setError(null);
-    setLoading(false);
   }, [selection?.id, selection?.side]);
 
   if (!selection) return null;
@@ -51,25 +57,27 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
   const tissue = selection.tissue;
   const meta = TISSUE_META[tissue];
   const Icon = meta.Icon;
+  const curriculum = classifyAnatomyStructure({
+    tissue,
+    label: selection.label,
+    labelEn: selection.labelEn,
+    id: selection.id,
+  });
 
   // Resolve display strings — bones come from the catalog, muscles/tendons use the selection label.
   const displayName = bone?.name ?? selection.label ?? "Structură anatomică";
   const displayLatin = bone?.latin ?? (tissue === "muschi" ? "Musculus" : tissue === "tendon" ? "Tendo" : "");
-  const categoryText = bone ? categoryLabels[bone.category] : meta.label;
+  const categoryText = bone ? categoryLabels[bone.category] : curriculum.group;
   const description =
     bone?.description ??
     (tissue === "muschi"
-      ? "Grup muscular din anatomia masculină. Mușchii produc mișcare prin contracție și se atașează de oase prin tendoane."
+      ? `${curriculum.group}${curriculum.subgroup ? ` - ${curriculum.subgroup}` : ""}. Mușchii produc mișcare prin contracție și se atașează de oase prin tendoane.`
       : tissue === "tendon"
-        ? "Țesut conjunctiv fibros care leagă mușchii de oase și transmite forța contracției musculare."
-        : "Structură osoasă din scheletul uman.");
+        ? `${curriculum.group}${curriculum.subgroup ? ` - ${curriculum.subgroup}` : ""}. Țesut conjunctiv fibros care stabilizează sau transmite forța musculară.`
+        : `${curriculum.group}${curriculum.subgroup ? ` - ${curriculum.subgroup}` : ""}. Structură osoasă organizată după regiunile aparatului locomotor.`);
   const funcText =
     bone?.funcție ??
-    (tissue === "muschi"
-      ? "Generează mișcare, susține postura și protejează structurile interne."
-      : tissue === "tendon"
-        ? "Transferă forța de la mușchi la os și stabilizează articulațiile."
-        : "Susține corpul și protejează organele.");
+    curriculum.functionHint;
 
   const placeholder =
     tissue === "muschi"
@@ -78,29 +86,25 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
         ? "Ex: durere ascuțită la mișcare, inflamație, senzație de arsură…"
         : "Ex: mă doare când urc scările, simt o înțepătură ascuțită…";
 
-  const canSubmit = symptoms.trim().length >= 3 && !loading;
+  const questions = getPainQuestions(tissue);
+  const answeredCount = questions.filter((question) => answers[question.id] !== undefined).length;
+  const canSubmit = symptoms.trim().length >= 3 && answeredCount === questions.length;
 
-  const handleAnalyze = async () => {
+  const handleAnalyze = () => {
     if (!canSubmit) return;
-    setLoading(true);
     setError(null);
     setResult(null);
-    try {
-      const res = await analyzeFn({
-        data: {
-          structureName: displayName,
-          structureLatin: displayLatin || undefined,
-          structureDescription: description,
-          tissueType: tissue,
-          symptoms: symptoms.trim(),
-        },
-      });
-      setResult(res);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "A apărut o eroare necunoscută.");
-    } finally {
-      setLoading(false);
+    const validation = validateSymptomRelevance({ selectedName: displayName, symptoms: symptoms.trim() });
+    if (!validation.ok) {
+      setError(validation.message ?? "Descrierea nu se potrivește cu zona selectată.");
+      return;
     }
+    const consistency = validateAnswerConsistency(answers);
+    if (!consistency.ok) {
+      setError(consistency.message ?? "Răspunsurile se contrazic. Revizuiește selecțiile.");
+      return;
+    }
+    setResult(analyzePainLocally({ tissueType: tissue, selectedName: displayName, symptoms: symptoms.trim(), answers }));
   };
 
   return (
@@ -148,6 +152,15 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
         <Section title="Funcție">
           <p className="text-sm leading-relaxed text-foreground/90">{funcText}</p>
         </Section>
+        <Section title="Încadrare anatomică">
+          <div className="grid grid-cols-2 gap-2">
+            <InfoChip label="Sistem" value={curriculum.system} />
+            <InfoChip label="Segment" value={curriculum.segment} />
+            <InfoChip label="Grupă" value={curriculum.group} />
+            <InfoChip label="Subgrupă" value={curriculum.subgroup ?? "General"} />
+            <InfoChip label="Față / plan" value={curriculum.aspect ?? "Plan general"} />
+          </div>
+        </Section>
 
         <div className="pt-3 mt-1 border-t border-primary/10">
           <div className="flex items-center gap-2 mb-3">
@@ -155,9 +168,9 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
               <Stethoscope className="size-4 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-sm font-bold tracking-tight">Asistent Simptome AI</h3>
+              <h3 className="text-sm font-bold tracking-tight">Asistent Simptome Local</h3>
               <p className="text-[11px] text-muted-foreground">
-                Specific pentru {meta.label.toLowerCase()} · {displayName.toLowerCase()}
+                Bază medicală locală · {displayName.toLowerCase()}
               </p>
             </div>
           </div>
@@ -168,12 +181,47 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
           <textarea
             value={symptoms}
             onChange={(e) => setSymptoms(e.target.value)}
-            disabled={loading}
             maxLength={800}
             rows={3}
             placeholder={placeholder}
             className="w-full resize-none rounded-2xl bg-white border border-primary/15 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all disabled:opacity-60"
           />
+
+          <div className="mt-3 space-y-3">
+            {questions.map((question, questionIndex) => (
+              <div key={question.id} className="rounded-2xl bg-white/70 border border-primary/10 p-3">
+                <div className="flex items-start gap-2">
+                  <span className="shrink-0 size-5 rounded-full bg-primary/10 text-primary text-[11px] font-bold flex items-center justify-center">
+                    {questionIndex + 1}
+                  </span>
+                  <p className="text-xs font-semibold leading-snug text-foreground/90">{question.question}</p>
+                </div>
+                <div className="mt-2 grid gap-1.5">
+                  {question.options.map((option, optionIndex) => {
+                    const selected = answers[question.id] === optionIndex;
+                    return (
+                      <button
+                        key={option.label}
+                        type="button"
+                        onClick={() => {
+                          setAnswers((current) => ({ ...current, [question.id]: optionIndex }));
+                          setResult(null);
+                        }}
+                        className={[
+                          "rounded-xl border px-3 py-2 text-left text-xs leading-snug transition-all",
+                          selected
+                            ? "border-primary/35 bg-primary/10 text-primary font-semibold"
+                            : "border-primary/10 bg-white/70 text-foreground/80 hover:border-primary/25 hover:bg-primary/5",
+                        ].join(" ")}
+                      >
+                        {option.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
 
           <button
             type="button"
@@ -186,22 +234,18 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
               "transition-all duration-300",
               "disabled:opacity-50 disabled:cursor-not-allowed",
               !canSubmit ? "" : "hover:shadow-[0_8px_24px_-6px_oklch(0.62_0.20_255_/_0.65)] hover:-translate-y-[1px]",
-              loading ? "ai-glow" : "",
               "flex items-center justify-center gap-2",
             ].join(" ")}
           >
-            {loading ? (
-              <>
-                <Loader2 className="size-4 animate-spin" />
-                Analizează…
-              </>
-            ) : (
-              <>
-                <Sparkles className="size-4" />
-                Analizează Simptomele
-              </>
-            )}
+            <Sparkles className="size-4" />
+            Generează verdictul
           </button>
+
+          {!canSubmit && (
+            <p className="mt-2 text-[11px] text-muted-foreground">
+              Completează descrierea și răspunde la toate întrebările pentru verdict.
+            </p>
+          )}
 
           {error && (
             <div className="mt-3 rounded-xl bg-destructive/10 border border-destructive/30 px-3 py-2 text-xs text-destructive">
@@ -211,6 +255,13 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
 
           {result && (
             <div className="mt-4 space-y-3 fade-up">
+              <div className={`rounded-2xl border px-3.5 py-2.5 ${painLevels[result.nivel].tone}`}>
+                <h4 className="text-[10px] tracking-[0.22em] uppercase font-semibold mb-1">
+                  Nivel durere
+                </h4>
+                <p className="text-sm font-bold">{painLevels[result.nivel].label}</p>
+                <p className="mt-1 text-xs leading-snug opacity-85">{result.explicatieNivel}</p>
+              </div>
               <div>
                 <h4 className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground font-semibold mb-1.5">
                   Posibile cauze
@@ -234,10 +285,27 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
                   {result.recomandare}
                 </p>
               </div>
+              {result.redFlags.length > 0 && (
+                <div>
+                  <h4 className="text-[10px] tracking-[0.22em] uppercase text-muted-foreground font-semibold mb-1.5">
+                    Semne importante
+                  </h4>
+                  <div className="flex flex-wrap gap-1.5">
+                    {result.redFlags.map((flag) => (
+                      <span
+                        key={flag}
+                        className="rounded-full bg-destructive/10 border border-destructive/25 px-2.5 py-1 text-[11px] font-semibold text-destructive"
+                      >
+                        {flag}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="rounded-2xl bg-destructive/8 border border-destructive/30 px-3.5 py-2.5 flex gap-2.5">
                 <AlertTriangle className="size-4 text-destructive shrink-0 mt-0.5" />
                 <p className="text-[11.5px] leading-snug text-destructive font-semibold">
-                  Acesta este un diagnostic generat de AI și nu înlocuiește sfatul unui medic real!
+                  Acesta este un triaj educațional, nu un diagnostic medical și nu înlocuiește consultul unui medic.
                 </p>
               </div>
             </div>
@@ -255,6 +323,17 @@ function Section({ title, children }: { title: string; children: React.ReactNode
         {title}
       </h3>
       {children}
+    </div>
+  );
+}
+
+function InfoChip({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-2xl bg-white/70 border border-primary/10 px-3 py-2">
+      <p className="text-[10px] uppercase tracking-[0.16em] text-muted-foreground font-semibold mb-1">
+        {label}
+      </p>
+      <p className="text-xs font-semibold leading-snug text-foreground/90">{value}</p>
     </div>
   );
 }

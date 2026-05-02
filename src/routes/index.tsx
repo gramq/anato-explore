@@ -3,20 +3,19 @@ import { useMemo, useState } from "react";
 import { SkeletonScene, type BoneSelection } from "@/components/skeleton/SkeletonScene";
 import { BoneInfoPanel } from "@/components/skeleton/BoneInfoPanel";
 import { LayersToggle, type LayersState } from "@/components/skeleton/LayersToggle";
-import { ReferencesButton } from "@/components/layout/ReferencesButton";
 import { bones } from "@/data/bones";
 import { MousePointerClick } from "lucide-react";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Explorator Anatomie 3D — InfoMed 3D" },
+      { title: "Explorator Anatomie 3D — Santix" },
       {
         name: "description",
         content:
           "Explorează anatomia umană în 3D — schelet, mușchi și tendoane. Click pe orice structură pentru detalii și asistent AI de simptome.",
       },
-      { property: "og:title", content: "Explorator Anatomie 3D — InfoMed 3D" },
+      { property: "og:title", content: "Explorator Anatomie 3D — Santix" },
       {
         property: "og:description",
         content: "Vizualizare interactivă 3D a oaselor și sistemului muscular.",
@@ -59,7 +58,6 @@ function ExploratorPage() {
         selection={selection}
         onClose={() => setSelection(null)}
       />
-      <ReferencesButton />
     </div>
   );
 }

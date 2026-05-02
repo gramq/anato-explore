@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, Suspense } from "react";
 import { Canvas, useFrame, useLoader, type ThreeEvent } from "@react-three/fiber";
-import { OrbitControls, Environment, ContactShadows, Html, useGLTF } from "@react-three/drei";
+import { OrbitControls, Environment, ContactShadows, Html, useGLTF, useProgress } from "@react-three/drei";
 import * as THREE from "three";
 import { GLTFLoader } from "three/examples/jsm/loaders/GLTFLoader.js";
 import type { LayersState } from "./LayersToggle";
@@ -28,8 +28,7 @@ const MESH_TO_BONE: Record<string, string> = {
   SM_HumanSkeleton_02: "carp",
 };
 
-const MALE_COMPLEX_URL = "/masculin_complex.glb";
-const FEMALE_URL = "/skeleton_female.glb";
+const MALE_COMPLEX_URL = "/anatomy/z-anatomy-musculoskeletal.glb?v=20260502-selection-2";
 const FALLBACK_URL = "/skeleton.glb";
 
 // Preload the heavy male anatomy model so it doesn't block first paint of the page.
@@ -46,11 +45,15 @@ export interface BoneSelection {
   tissue: TissueType;
   /** Display label (used when the selection is not a catalogued bone). */
   label?: string;
+  /** Original English anatomical name, useful for stable classification/search. */
+  labelEn?: string;
 }
 
-const HOVER_COLOR_BONE = new THREE.Color("#bfdcff");
-const HOVER_COLOR_MUSCLE = new THREE.Color("#ffb199");
-const SELECT_COLOR = new THREE.Color("#007aff");
+const HOVER_COLOR_BONE = new THREE.Color("#7dd3fc");
+const HOVER_COLOR_MUSCLE = new THREE.Color("#ff9f1c");
+const SELECT_COLOR = new THREE.Color("#00d9ff");
+const SELECT_EMISSIVE = new THREE.Color("#00a3ff");
+const DIM_COLOR = new THREE.Color("#dbe4ee");
 
 // ----- Female (simple skeleton GLB) -----------------------------------------
 
@@ -254,35 +257,6 @@ interface ComplexMaleProps {
   onSelect: (sel: BoneSelection | null) => void;
 }
 
-/**
- * Heuristic mesh classification by parent SubTool node + material index.
- * SubTool-0 (4 sub-meshes, material_0, ~230k verts) → muscles
- * SubTool-1 (1 mesh, material_1, ~42k verts)        → skeleton
- * SubTool-2 (1 mesh, material_2, ~10k verts)        → tendons / connective tissue
- */
-function classifyMesh(mesh: THREE.Mesh): TissueType {
-  let cur: THREE.Object3D | null = mesh;
-  while (cur) {
-    const n = cur.name || "";
-    if (n.includes("SubTool-1")) return "os";
-    if (n.includes("SubTool-2")) return "tendon";
-    if (n.includes("SubTool-0")) return "muschi";
-    cur = cur.parent;
-  }
-  // fallback by material name
-  const mat = mesh.material as THREE.Material | undefined;
-  if (mat?.name === "material_1") return "os";
-  if (mat?.name === "material_2") return "tendon";
-  return "muschi";
-}
-
-const MUSCLE_LABELS: Record<number, string> = {
-  0: "Grup muscular superior",
-  1: "Grup muscular trunchi",
-  2: "Grup muscular membre",
-  3: "Grup muscular profund",
-};
-
 function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: ComplexMaleProps) {
   const gltf = useLoader(GLTFLoader, url);
   const groupRef = useRef<THREE.Group>(null);
@@ -290,53 +264,50 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
   const { cloned, layerMeshes } = useMemo(() => {
     const root = gltf.scene.clone(true);
     const layerMeshes: Record<TissueType, THREE.Mesh[]> = { os: [], muschi: [], tendon: [] };
-    let muscleIdx = 0;
     root.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh) return;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
 
-      const tissue = classifyMesh(mesh);
+      const tissue = ((mesh.userData.tissue as TissueType | undefined) ?? "muschi");
+      const structureId =
+        (mesh.userData.structureId as string | undefined) ??
+        `${tissue}-${mesh.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`;
+      const structureName =
+        (mesh.userData.structureName as string | undefined) ??
+        mesh.name.replace(/\.[a-z]+$/i, "").replace(/[()[\]]/g, "").trim();
+      const structureNameEn = (mesh.userData.structureNameEn as string | undefined) ?? structureName;
+
       mesh.userData.tissue = tissue;
       mesh.userData.side = "male";
-
-      // Synthetic ids so each sub-mesh is independently selectable
-      if (tissue === "os") {
-        // Try to map all bones onto a generic "schelet-masculin" so the AI gets bone context.
-        mesh.userData.selectionId = "schelet-masculin";
-        mesh.userData.selectionLabel = "Sistem osos (masculin)";
-      } else if (tissue === "muschi") {
-        const idx = muscleIdx++;
-        mesh.userData.selectionId = `muschi-grup-${idx}`;
-        mesh.userData.selectionLabel = MUSCLE_LABELS[idx] ?? `Grup muscular ${idx + 1}`;
-      } else {
-        mesh.userData.selectionId = "tendon-conjunctiv";
-        mesh.userData.selectionLabel = "Tendon / țesut conjunctiv";
-      }
+      mesh.userData.selectionId = structureId;
+      mesh.userData.selectionLabel = structureName;
+      mesh.userData.selectionLabelEn = structureNameEn;
 
       const baseColor =
         tissue === "os"
-          ? new THREE.Color("#f4ecd6")
+          ? new THREE.Color("#f6ead2")
           : tissue === "muschi"
-            ? new THREE.Color("#a83232") // anatomical red
-            : new THREE.Color("#e9c9a4"); // tendon ivory
+            ? new THREE.Color("#b23a32")
+            : new THREE.Color("#ead2ad");
 
       const mat = new THREE.MeshPhysicalMaterial({
         color: baseColor,
-        roughness: tissue === "os" ? 0.5 : tissue === "muschi" ? 0.55 : 0.6,
+        roughness: tissue === "os" ? 0.42 : tissue === "muschi" ? 0.58 : 0.55,
         metalness: 0,
-        clearcoat: tissue === "muschi" ? 0.25 : 0.1,
-        clearcoatRoughness: 0.5,
-        emissive: SELECT_COLOR.clone(),
+        clearcoat: tissue === "muschi" ? 0.2 : 0.16,
+        clearcoatRoughness: 0.45,
+        emissive: SELECT_EMISSIVE.clone(),
         emissiveIntensity: 0,
-        transparent: tissue === "muschi" || tissue === "tendon",
-        opacity: tissue === "muschi" ? 0.78 : tissue === "tendon" ? 0.85 : 1,
+        transparent: true,
+        opacity: tissue === "muschi" ? 0.62 : tissue === "tendon" ? 0.72 : 1,
         depthWrite: tissue === "os",
         envMapIntensity: 1.1,
         side: THREE.DoubleSide,
       });
       mat.userData.baseColor = baseColor.clone();
+      mat.userData.baseOpacity = mat.opacity;
       mesh.material = mat;
       layerMeshes[tissue].push(mesh);
     });
@@ -350,15 +321,15 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
     layerMeshes.tendon.forEach((m) => (m.visible = layers.tendons));
   }, [layers, layerMeshes]);
 
-  // Center & scale to ~5.2 units height
+  // Center & scale to a calm anatomy-viewer size without changing the authored orientation.
   const { scale, offset } = useMemo(() => {
     const box = new THREE.Box3().setFromObject(cloned);
     const size = new THREE.Vector3();
     const center = new THREE.Vector3();
     box.getSize(size);
     box.getCenter(center);
-    const targetHeight = 5.2;
-    const s = targetHeight / (size.y || 1);
+    const targetHeight = 5.8;
+    const s = targetHeight / (size.y || size.z || 1);
     return { scale: s, offset: new THREE.Vector3(-center.x, -center.y, -center.z) };
   }, [cloned]);
 
@@ -366,25 +337,48 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
 
   useFrame(() => {
     const hovered = hoveredMeshRef.current;
+    const hasSelection = selection !== null && selection.side === "male";
     cloned.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if (!mesh.isMesh || !mesh.material) return;
       const mat = mesh.material as THREE.MeshPhysicalMaterial;
       const baseColor = (mat.userData.baseColor as THREE.Color) ?? mat.color;
+      const baseOpacity = (mat.userData.baseOpacity as number | undefined) ?? mat.opacity;
       const tissue = mesh.userData.tissue as TissueType;
-      const selectionId = mesh.userData.selectionId as string;
+      const selectionId = mesh.userData.selectionId as string | undefined;
 
       const isSelected =
         selection !== null &&
         selection.side === "male" &&
         selection.id === selectionId;
-      const isHov = hovered === mesh && !isSelected;
+      const isHov =
+        !!selectionId &&
+        hovered !== null &&
+        hovered.userData.selectionId === selectionId &&
+        !isSelected;
 
-      const targetEmissive = isSelected ? 0.7 : 0;
+      mesh.renderOrder = isSelected ? 10 : 0;
+      mat.depthWrite = isSelected || (!hasSelection && tissue === "os");
+      mat.depthTest = true;
+
+      const targetOpacity = isSelected
+        ? 1
+        : hasSelection
+          ? tissue === "os"
+            ? 0.18
+            : tissue === "muschi"
+              ? 0.12
+              : 0.1
+          : isHov
+            ? Math.min(1, baseOpacity + 0.2)
+            : baseOpacity;
+      mat.opacity += (targetOpacity - mat.opacity) * 0.22;
+
+      const targetEmissive = isSelected ? 1.35 : isHov ? 0.2 : 0;
       mat.emissiveIntensity += (targetEmissive - mat.emissiveIntensity) * 0.18;
 
       const hoverColor = tissue === "muschi" ? HOVER_COLOR_MUSCLE : HOVER_COLOR_BONE;
-      const targetColor = isSelected ? SELECT_COLOR : isHov ? hoverColor : baseColor;
+      const targetColor = isSelected ? SELECT_COLOR : hasSelection ? DIM_COLOR : isHov ? hoverColor : baseColor;
       mat.color.lerp(targetColor, 0.18);
     });
 
@@ -408,11 +402,12 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
     const mesh = e.object as THREE.Mesh;
-    const id = mesh.userData?.selectionId as string | undefined;
     const tissue = mesh.userData?.tissue as TissueType | undefined;
+    const id = mesh.userData?.selectionId as string | undefined;
     const label = mesh.userData?.selectionLabel as string | undefined;
-    if (!id || !tissue) return;
-    onSelect({ id, side: "male", tissue, label });
+    const labelEn = mesh.userData?.selectionLabelEn as string | undefined;
+    if (!tissue || !id) return;
+    onSelect({ id, side: "male", tissue, label, labelEn });
   };
 
   return (
@@ -425,9 +420,9 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
       onClick={handleClick}
     >
       <primitive object={cloned} position={offset} />
-      <Html position={[0, -3.2 / scale, 0]} center distanceFactor={10} zIndexRange={[10, 0]}>
-        <div className="px-3 py-1 rounded-full bg-white/85 border border-primary/15 backdrop-blur-md text-[10px] tracking-[0.22em] uppercase font-bold text-primary shadow-[0_4px_12px_-4px_oklch(0.62_0.20_255_/_0.25)]">
-          Masculin · Anatomie
+      <Html position={[0, -3.35 / scale, 0]} center distanceFactor={8} zIndexRange={[10, 0]}>
+        <div className="px-3 py-1 rounded-full bg-white/90 border border-primary/10 backdrop-blur-md text-[10px] tracking-[0.22em] uppercase font-bold text-primary shadow-[0_4px_12px_-4px_oklch(0.62_0.20_255_/_0.18)]">
+          Model principal
         </div>
       </Html>
     </group>
@@ -435,10 +430,23 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
 }
 
 function LoadingFallback() {
+  const { progress } = useProgress();
+  const roundedProgress = Math.round(progress);
   return (
     <Html center>
-      <div className="text-primary text-sm font-medium tracking-wide animate-pulse">
-        Se încarcă modelele anatomice…
+      <div className="min-w-[240px] rounded-2xl border border-primary/15 bg-white/90 px-4 py-3 text-center shadow-lg backdrop-blur-md">
+        <div className="text-sm font-bold tracking-tight text-primary">
+          Se încarcă modelul anatomic
+        </div>
+        <div className="mt-1 text-[11px] font-medium text-muted-foreground">
+          {roundedProgress > 0 ? `${roundedProgress}%` : "Pregătire model 3D..."}
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-primary/10">
+          <div
+            className="h-full rounded-full bg-primary transition-[width] duration-300"
+            style={{ width: `${Math.max(roundedProgress, 8)}%` }}
+          />
+        </div>
       </div>
     </Html>
   );
@@ -456,60 +464,50 @@ export function SkeletonScene({ selection, onSelect, layers }: SkeletonSceneProp
   return (
     <Canvas
       shadows
-      camera={{ position: [0, 0.8, 9.5], fov: 40 }}
+      camera={{ position: [0, 0.15, 10], fov: 30 }}
       gl={{ antialias: true, alpha: true }}
       onPointerMissed={() => onSelect(null)}
     >
-      <color attach="background" args={["#f0f4f8"]} />
-      <fog attach="fog" args={["#f0f4f8", 14, 28]} />
+      <color attach="background" args={["#ffffff"]} />
+      <fog attach="fog" args={["#ffffff", 10, 22]} />
 
-      <hemisphereLight args={["#ffffff", "#b8c8d8", 0.85]} />
-      <ambientLight intensity={0.35} />
+      <hemisphereLight args={["#ffffff", "#d9e4ef", 1.05]} />
+      <ambientLight intensity={0.55} />
       <directionalLight
-        position={[6, 10, 6]}
-        intensity={1.5}
+        position={[5, 8, 7]}
+        intensity={1.25}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
         shadow-bias={-0.0005}
       />
-      <directionalLight position={[-6, 6, -2]} intensity={0.5} color="#ffffff" />
-      <directionalLight position={[0, 4, -8]} intensity={1.1} color="#dbeafe" />
-      <pointLight position={[0, 3, 5]} intensity={0.35} color="#cfe5ff" />
+      <directionalLight position={[-5, 5, 5]} intensity={0.55} color="#ffffff" />
+      <directionalLight position={[0, 4, -8]} intensity={0.7} color="#eaf2ff" />
+      <pointLight position={[0, 2.5, 5]} intensity={0.22} color="#ffffff" />
 
       <Suspense fallback={<LoadingFallback />}>
         <ComplexMaleModel
           url={MALE_COMPLEX_URL}
-          xOffset={-1.9}
+          xOffset={0}
           layers={layers}
           selection={selection}
           onSelect={onSelect}
         />
-        <SimpleSkeletonModel
-          url={FEMALE_URL}
-          fallbackUrl={FALLBACK_URL}
-          xOffset={1.9}
-          label="Feminin"
-          side="female"
-          variant="pearl"
-          selection={selection}
-          onSelect={onSelect}
-        />
         <ContactShadows
-          position={[0, -2.85, 0]}
-          opacity={0.4}
-          scale={14}
-          blur={2.6}
+          position={[0, -2.9, 0]}
+          opacity={0.22}
+          scale={8}
+          blur={2.2}
           far={5}
-          color="#1e3a8a"
+          color="#94a3b8"
         />
-        <Environment preset="studio" environmentIntensity={0.95} />
+        <Environment preset="studio" environmentIntensity={0.7} />
       </Suspense>
 
       <OrbitControls
         enablePan={false}
-        minDistance={5}
-        maxDistance={16}
+        minDistance={5.8}
+        maxDistance={15}
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 1.6}
         target={[0, 0, 0]}

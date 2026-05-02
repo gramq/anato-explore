@@ -3,7 +3,7 @@ import { Boxes, BookOpen, Brain, Activity, Bone as BoneIcon, Layers } from "luci
 
 const nav = [
   { to: "/", label: "Explorator Schelet", icon: Boxes },
-  { to: "/glosar", label: "Glosar Medical", icon: BookOpen },
+  { to: "/glosar", label: "Bibliotecă anatomică", icon: BookOpen },
   { to: "/quiz", label: "Test Rapid", icon: Brain },
 ] as const;
 
@@ -18,7 +18,7 @@ export function Sidebar() {
             <BoneIcon className="size-5 text-primary-foreground" strokeWidth={2.5} />
           </div>
           <div>
-            <h1 className="text-lg font-bold tracking-tight leading-none">InfoMed <span className="text-gradient-bone">3D</span></h1>
+            <h1 className="text-lg font-bold tracking-tight leading-none">Santix</h1>
             <p className="text-[11px] text-muted-foreground mt-1 tracking-wider uppercase">Anatomie Umană</p>
           </div>
         </div>
