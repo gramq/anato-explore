@@ -18,11 +18,10 @@ const ITEMS: Array<{
   label: string;
   hint: string;
   Icon: typeof Bone;
-  dot: string;
 }> = [
-  { key: "skeleton", label: "Doar Schelet", hint: "Oase vizibile", Icon: Bone, dot: "bg-[oklch(0.94_0.02_80)] border border-primary/30" },
-  { key: "muscles", label: "Sistem Muscular", hint: "Mușchi semi-transparenți", Icon: Activity, dot: "bg-[oklch(0.55_0.18_25)]" },
-  { key: "tendons", label: "Anatomie Completă", hint: "Tendoane și țesuturi", Icon: LayersIcon, dot: "bg-[oklch(0.85_0.05_60)]" },
+  { key: "skeleton", label: "Doar Schelet", hint: "Oase vizibile", Icon: Bone },
+  { key: "muscles", label: "Sistem Muscular", hint: "Mușchi semi-transparenți", Icon: Activity },
+  { key: "tendons", label: "Anatomie Completă", hint: "Tendoane și țesuturi", Icon: LayersIcon },
 ];
 
 export function LayersToggle({ layers, onChange }: Props) {
@@ -35,7 +34,7 @@ export function LayersToggle({ layers, onChange }: Props) {
         </span>
       </div>
       <div className="space-y-1">
-        {ITEMS.map(({ key, label, hint, Icon, dot }) => {
+        {ITEMS.map(({ key, label, hint, Icon }) => {
           const active = layers[key];
           return (
             <button
@@ -76,7 +75,15 @@ export function LayersToggle({ layers, onChange }: Props) {
                   ].join(" ")}
                 />
               </span>
-              <span className={`size-2 rounded-full ${dot}`} aria-hidden />
+              <span
+                className={[
+                  "size-2 rounded-full border transition-all",
+                  active
+                    ? "border-blue-400 bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.75)]"
+                    : "border-slate-300/60 bg-slate-300/25 shadow-none",
+                ].join(" ")}
+                aria-hidden
+              />
             </button>
           );
         })}

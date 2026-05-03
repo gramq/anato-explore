@@ -73,6 +73,15 @@ export interface PainQuestion {
 
 const baseQuestions: PainQuestion[] = [
   {
+    id: "varsta",
+    question: "Ce vârstă are persoana?",
+    options: [
+      { label: "Sub 12 ani", score: { mediu: 1, consultare_doctor: 1 }, finding: "copil" },
+      { label: "12-64 ani", score: { usor: 1 }, finding: "adult" },
+      { label: "65+ ani", score: { mediu: 1, consultare_doctor: 1 }, finding: "vârstă înaintată" },
+    ],
+  },
+  {
     id: "intensitate",
     question: "Cât de intensă este durerea?",
     options: [
@@ -289,25 +298,16 @@ export function validateSymptomRelevance({
 export function analyzePainLocally({
   tissueType,
   selectedName,
-  symptoms,
   answers,
+  segment,
+  group,
 }: {
   tissueType: "os" | "muschi" | "tendon";
   selectedName: string;
-  symptoms: string;
   answers: Record<string, number>;
+  segment?: string;
+  group?: string;
 }): SymptomAnalysis {
-  const validation = validateSymptomRelevance({ selectedName, symptoms });
-  if (!validation.ok) {
-    return {
-      nivel: "consultare_doctor",
-      cauze: ["Simptomele nu corespund structurii anatomice selectate."],
-      recomandare: validation.message ?? "Alege zona corectă sau reformulează simptomele.",
-      explicatieNivel: "Nu pot genera un verdict util deoarece descrierea nu se potrivește cu zona selectată.",
-      redFlags: ["zonă anatomică nepotrivită"],
-    };
-  }
-
   const consistency = validateAnswerConsistency(answers);
   if (!consistency.ok) {
     return {
@@ -325,8 +325,6 @@ export function analyzePainLocally({
     consultare_doctor: 0,
   };
   const findings: string[] = [];
-  const keywordLevel = classifyPainLocally(symptoms);
-  scores[keywordLevel] += keywordLevel === "consultare_doctor" ? 4 : keywordLevel === "mediu" ? 2 : 1;
 
   for (const question of getPainQuestions(tissueType)) {
     const optionIndex = answers[question.id];
@@ -337,6 +335,35 @@ export function analyzePainLocally({
       scores[level] += score;
     }
     if (option.finding) findings.push(option.finding);
+  }
+
+  const zoneRisk = getZoneRisk({ selectedName, segment, group });
+  scores.mediu += zoneRisk.mediumBoost;
+  scores.consultare_doctor += zoneRisk.doctorBoost;
+  if (zoneRisk.finding) findings.push(zoneRisk.finding);
+
+  const intensity = answers.intensitate;
+  const signs = answers.semne;
+  const debut = answers.debut;
+  const duration = answers.durata;
+  const functionLevel = answers.functie;
+
+  if (zoneRisk.level === "high" && intensity === 1) {
+    scores.consultare_doctor += 4;
+    findings.push("durere moderată într-o zonă sensibilă");
+  }
+
+  if (zoneRisk.level === "high" && [1, 2].includes(signs ?? -1)) {
+    scores.consultare_doctor += signs === 2 ? 4 : 2;
+    findings.push("semne asociate într-o zonă sensibilă");
+  }
+
+  if (zoneRisk.level === "high" && ([1, 2].includes(debut ?? -1) || [1, 2].includes(duration ?? -1))) {
+    scores.consultare_doctor += 2;
+  }
+
+  if (zoneRisk.level !== "low" && functionLevel === 2) {
+    scores.consultare_doctor += 2;
   }
 
   const level = pickLevel(scores);
@@ -352,6 +379,52 @@ export function analyzePainLocally({
       ["traumă", "pocnet", "alarmă", "imposibilitate", "pierdere", "severă"].some((word) => finding.includes(word)),
     ),
   };
+}
+
+function getZoneRisk({
+  selectedName,
+  segment,
+  group,
+}: {
+  selectedName: string;
+  segment?: string;
+  group?: string;
+}): {
+  level: "low" | "medium" | "high";
+  mediumBoost: number;
+  doctorBoost: number;
+  finding?: string;
+} {
+  const text = [selectedName, segment, group]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+
+  if (
+    ["cap", "craniu", "fata", "ceafa", "gat", "cervical", "coloana", "vertebr", "piept", "torace", "toracel", "stern", "coaste", "intercostal", "pectoral"].some((term) =>
+      text.includes(term),
+    )
+  ) {
+    return {
+      level: "high",
+      mediumBoost: 1,
+      doctorBoost: 2,
+      finding: "zonă sensibilă",
+    };
+  }
+
+  if (["abdomen", "bazin", "pelvis", "sold", "umar"].some((term) => text.includes(term))) {
+    return {
+      level: "medium",
+      mediumBoost: 1,
+      doctorBoost: 0,
+      finding: "zonă cu atenție moderată",
+    };
+  }
+
+  return { level: "low", mediumBoost: 0, doctorBoost: 0 };
 }
 
 export function validateAnswerConsistency(answers: Record<string, number>): SymptomValidation {

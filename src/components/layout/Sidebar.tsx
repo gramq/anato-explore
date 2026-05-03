@@ -1,5 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Boxes, BookOpen, Brain, Activity, Bone as BoneIcon, Layers } from "lucide-react";
+import { Boxes, BookOpen, Brain, Activity, Layers } from "lucide-react";
 
 const nav = [
   { to: "/", label: "Explorator Schelet", icon: Boxes },
@@ -13,15 +13,11 @@ export function Sidebar() {
     <aside className="hidden lg:flex w-72 shrink-0 flex-col p-4 gap-4">
       {/* Brand */}
       <div className="glass rounded-3xl p-5 fade-up">
-        <div className="flex items-center gap-3">
-          <div className="size-11 rounded-2xl bg-gradient-to-br from-primary to-bone-glow flex items-center justify-center shadow-[var(--shadow-glow)]">
-            <BoneIcon className="size-5 text-primary-foreground" strokeWidth={2.5} />
-          </div>
-          <div>
-            <h1 className="text-lg font-bold tracking-tight leading-none">Santix</h1>
-            <p className="text-[11px] text-muted-foreground mt-1 tracking-wider uppercase">Anatomie Umană</p>
-          </div>
-        </div>
+        <img
+          src="/brand/santix-logo.png"
+          alt="Santix"
+          className="h-16 w-full rounded-2xl object-cover object-center brightness-75 contrast-150 saturate-150 shadow-[var(--shadow-glow)]"
+        />
       </div>
 
       {/* Nav */}

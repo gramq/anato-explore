@@ -6,7 +6,6 @@ import {
   getPainQuestions,
   painLevels,
   validateAnswerConsistency,
-  validateSymptomRelevance,
   type SymptomAnalysis,
 } from "@/data/painKnowledge";
 import { classifyAnatomyStructure } from "@/data/anatomyCurriculum";
@@ -40,17 +39,15 @@ const TISSUE_META: Record<TissueType, { label: string; Icon: typeof BookMarked; 
 };
 
 export function BoneInfoPanel({ bone, selection, onClose }: Props) {
-  const [symptoms, setSymptoms] = useState("");
   const [answers, setAnswers] = useState<Record<string, number>>({});
   const [result, setResult] = useState<SymptomAnalysis | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    setSymptoms("");
     setAnswers({});
     setResult(null);
     setError(null);
-  }, [selection?.id, selection?.side]);
+  }, [selection?.id, selection?.regionId, selection?.side]);
 
   if (!selection) return null;
 
@@ -65,7 +62,7 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
   });
 
   // Resolve display strings — bones come from the catalog, muscles/tendons use the selection label.
-  const displayName = bone?.name ?? selection.label ?? "Structură anatomică";
+  const displayName = bone?.name ?? selection.regionLabel ?? selection.label ?? "Structură anatomică";
   const displayLatin = bone?.latin ?? (tissue === "muschi" ? "Musculus" : tissue === "tendon" ? "Tendo" : "");
   const categoryText = bone ? categoryLabels[bone.category] : curriculum.group;
   const description =
@@ -79,32 +76,28 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
     bone?.funcție ??
     curriculum.functionHint;
 
-  const placeholder =
-    tissue === "muschi"
-      ? "Ex: simt o crampă, mă doare la efort, am întins mușchiul…"
-      : tissue === "tendon"
-        ? "Ex: durere ascuțită la mișcare, inflamație, senzație de arsură…"
-        : "Ex: mă doare când urc scările, simt o înțepătură ascuțită…";
-
   const questions = getPainQuestions(tissue);
   const answeredCount = questions.filter((question) => answers[question.id] !== undefined).length;
-  const canSubmit = symptoms.trim().length >= 3 && answeredCount === questions.length;
+  const canSubmit = answeredCount === questions.length;
 
   const handleAnalyze = () => {
     if (!canSubmit) return;
     setError(null);
     setResult(null);
-    const validation = validateSymptomRelevance({ selectedName: displayName, symptoms: symptoms.trim() });
-    if (!validation.ok) {
-      setError(validation.message ?? "Descrierea nu se potrivește cu zona selectată.");
-      return;
-    }
     const consistency = validateAnswerConsistency(answers);
     if (!consistency.ok) {
       setError(consistency.message ?? "Răspunsurile se contrazic. Revizuiește selecțiile.");
       return;
     }
-    setResult(analyzePainLocally({ tissueType: tissue, selectedName: displayName, symptoms: symptoms.trim(), answers }));
+    setResult(
+      analyzePainLocally({
+        tissueType: tissue,
+        selectedName: displayName,
+        answers,
+        segment: curriculum.segment,
+        group: curriculum.group,
+      }),
+    );
   };
 
   return (
@@ -145,7 +138,7 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
         </div>
       )}
 
-      <div className="space-y-4 overflow-y-auto pr-1 flex-1 -mr-1">
+      <div className="flex flex-col gap-4 overflow-y-auto pr-1 flex-1 -mr-1">
         <Section title="Descriere">
           <p className="text-sm leading-relaxed text-foreground/90">{description}</p>
         </Section>
@@ -162,30 +155,18 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
           </div>
         </Section>
 
-        <div className="pt-3 mt-1 border-t border-primary/10">
+        <div className="order-first pb-3 mb-1 border-b border-primary/10">
           <div className="flex items-center gap-2 mb-3">
             <div className="size-8 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-[0_4px_12px_-4px_oklch(0.62_0.20_255_/_0.45)]">
               <Stethoscope className="size-4 text-primary-foreground" />
             </div>
             <div>
-              <h3 className="text-sm font-bold tracking-tight">Asistent Simptome Local</h3>
+              <h3 className="text-sm font-bold tracking-tight">Triaj rapid local</h3>
               <p className="text-[11px] text-muted-foreground">
-                Bază medicală locală · {displayName.toLowerCase()}
+                Întrebări generale · {displayName.toLowerCase()}
               </p>
             </div>
           </div>
-
-          <label className="block text-[11px] text-muted-foreground mb-1.5 font-medium">
-            Ce te doare în această zonă?
-          </label>
-          <textarea
-            value={symptoms}
-            onChange={(e) => setSymptoms(e.target.value)}
-            maxLength={800}
-            rows={3}
-            placeholder={placeholder}
-            className="w-full resize-none rounded-2xl bg-white border border-primary/15 px-3.5 py-2.5 text-sm text-foreground placeholder:text-muted-foreground/70 focus:outline-none focus:border-primary/40 focus:ring-2 focus:ring-primary/15 transition-all disabled:opacity-60"
-          />
 
           <div className="mt-3 space-y-3">
             {questions.map((question, questionIndex) => (
@@ -238,12 +219,12 @@ export function BoneInfoPanel({ bone, selection, onClose }: Props) {
             ].join(" ")}
           >
             <Sparkles className="size-4" />
-            Generează verdictul
+            Calculează triajul
           </button>
 
           {!canSubmit && (
             <p className="mt-2 text-[11px] text-muted-foreground">
-              Completează descrierea și răspunde la toate întrebările pentru verdict.
+              Răspunde la toate întrebările pentru a calcula nivelul de triaj.
             </p>
           )}
 

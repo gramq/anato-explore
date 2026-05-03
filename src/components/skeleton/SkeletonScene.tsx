@@ -43,17 +43,132 @@ export interface BoneSelection {
   id: string;
   side: SkeletonSide;
   tissue: TissueType;
+  /** Intuitive region used to highlight related tiny pieces together. */
+  regionId?: string;
+  regionLabel?: string;
   /** Display label (used when the selection is not a catalogued bone). */
   label?: string;
   /** Original English anatomical name, useful for stable classification/search. */
   labelEn?: string;
 }
 
-const HOVER_COLOR_BONE = new THREE.Color("#7dd3fc");
-const HOVER_COLOR_MUSCLE = new THREE.Color("#ff9f1c");
-const SELECT_COLOR = new THREE.Color("#00d9ff");
-const SELECT_EMISSIVE = new THREE.Color("#00a3ff");
-const DIM_COLOR = new THREE.Color("#dbe4ee");
+const HOVER_COLOR_BONE = new THREE.Color("#7b5cff");
+const HOVER_COLOR_MUSCLE = new THREE.Color("#d91f7b");
+const SELECT_COLOR = new THREE.Color("#4a2fb7");
+const SELECT_EMISSIVE = new THREE.Color("#c01874");
+const DIM_COLOR = new THREE.Color("#e7ddf3");
+
+function isTissueLayerActive(tissue: TissueType | undefined, layers: LayersState) {
+  if (tissue === "os") return layers.skeleton;
+  if (tissue === "muschi") return layers.muscles;
+  if (tissue === "tendon") return layers.tendons;
+  return false;
+}
+
+function tissuePriority(tissue: TissueType | undefined) {
+  if (tissue === "muschi") return 0;
+  if (tissue === "os") return 1;
+  if (tissue === "tendon") return 2;
+  return 3;
+}
+
+function normalizeAnatomyName(value: string) {
+  return value
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "");
+}
+
+function hasTerm(value: string, terms: string[]) {
+  return terms.some((term) => value.includes(term));
+}
+
+function makeRegion(regionId: string, regionLabel: string) {
+  return { regionId, regionLabel };
+}
+
+function inferIntuitiveRegion(input: {
+  tissue: TissueType;
+  id?: string;
+  label?: string;
+  labelEn?: string;
+}) {
+  const name = normalizeAnatomyName([input.labelEn, input.label, input.id].filter(Boolean).join(" "));
+  const prefix = input.tissue;
+
+  if (input.tissue === "tendon") {
+    if (hasTerm(name, ["plantar", "foot", "hallucis", "digiti minimi"])) {
+      return makeRegion(`${prefix}:laba-piciorului`, "Laba piciorului");
+    }
+    if (hasTerm(name, ["palmar", "hand", "pollicis", "carpal", "finger", "digit"])) {
+      return makeRegion(`${prefix}:mana`, "Mâna");
+    }
+    if (hasTerm(name, ["deltoid", "supraspinatus", "infraspinatus", "subscapularis"])) {
+      return makeRegion(`${prefix}:umar`, "Umăr");
+    }
+    if (hasTerm(name, ["abdominal", "oblique", "rectus abdominis", "transversus abdominis"])) {
+      return makeRegion(`${prefix}:abdomen`, "Abdomen");
+    }
+    return undefined;
+  }
+
+  if (input.tissue === "os") {
+    if (hasTerm(name, ["carpal", "metacarpal", "phalanx of hand", "distal phalanx hand", "middle phalanx hand", "proximal phalanx hand"])) {
+      return makeRegion(`${prefix}:schelet-mana`, "Scheletul mâinii");
+    }
+    if (hasTerm(name, ["tarsal", "metatarsal", "phalanx of foot", "calcaneus", "talus", "cuboid", "cuneiform", "navicular"])) {
+      return makeRegion(`${prefix}:schelet-picior`, "Scheletul labei piciorului");
+    }
+    if (hasTerm(name, ["rib", "sternum", "manubrium", "xiphoid"])) {
+      return makeRegion(`${prefix}:cutie-toracica`, "Cutia toracică");
+    }
+    if (hasTerm(name, ["vertebra", "atlas", "axis"])) {
+      if (hasTerm(name, ["cervical", "atlas", "axis"])) return makeRegion(`${prefix}:coloana-cervicala`, "Coloana cervicală");
+      if (hasTerm(name, ["thoracic", " t1", " t2", " t3", " t4", " t5", " t6", " t7", " t8", " t9", "t10", "t11", "t12"])) {
+        return makeRegion(`${prefix}:coloana-toracala`, "Coloana toracală");
+      }
+      if (hasTerm(name, ["lumbar", " l1", " l2", " l3", " l4", " l5"])) return makeRegion(`${prefix}:coloana-lombara`, "Coloana lombară");
+      return makeRegion(`${prefix}:coloana`, "Coloana vertebrală");
+    }
+    if (hasTerm(name, ["frontal", "parietal", "temporal", "occipital", "sphenoid", "ethmoid"])) {
+      return makeRegion(`${prefix}:craniu`, "Craniu");
+    }
+    return undefined;
+  }
+
+  if (hasTerm(name, ["lumbrical", "interossei", "opponens", "palmar", "pollicis", "digiti minimi of hand"])) {
+    return makeRegion(`${prefix}:muschii-mainii`, "Mușchii mâinii");
+  }
+  if (hasTerm(name, ["hallucis", "digiti minimi of foot", "plantar", "quadratus plantae", "foot"])) {
+    return makeRegion(`${prefix}:muschii-piciorului`, "Mușchii labei piciorului");
+  }
+  if (hasTerm(name, ["tibialis", "fibularis", "gastrocnemius", "soleus", "plantaris", "popliteus"])) {
+    return makeRegion(`${prefix}:muschii-gambei`, "Mușchii gambei");
+  }
+  if (hasTerm(name, ["sartorius", "rectus femoris", "vastus", "adductor", "gracilis", "biceps femoris", "semitendinosus", "semimembranosus"])) {
+    return makeRegion(`${prefix}:muschii-coapsei`, "Mușchii coapsei");
+  }
+  if (hasTerm(name, ["flexor carpi", "extensor carpi", "flexor digitorum", "extensor digitorum", "pronator", "supinator", "brachioradialis"])) {
+    return makeRegion(`${prefix}:muschii-antebratului`, "Mușchii antebrațului");
+  }
+  if (hasTerm(name, ["biceps brachii", "brachialis", "coracobrachialis", "triceps brachii", "anconeus"])) {
+    return makeRegion(`${prefix}:muschii-bratului`, "Mușchii brațului");
+  }
+  if (hasTerm(name, ["oblique", "rectus abdominis", "transversus abdominis", "pyramidalis"])) {
+    return makeRegion(`${prefix}:muschii-abdomenului`, "Mușchii abdomenului");
+  }
+  if (hasTerm(name, ["pectoralis", "serratus anterior", "intercostal", "diaphragm"])) {
+    return makeRegion(`${prefix}:muschii-toracelui`, "Mușchii toracelui");
+  }
+  if (hasTerm(name, ["deltoid", "supraspinatus", "infraspinatus", "subscapularis", "teres major", "teres minor"])) {
+    return makeRegion(`${prefix}:muschii-umarului`, "Mușchii umărului");
+  }
+  if (hasTerm(name, ["gluteus", "piriformis", "obturator", "gemellus", "quadratus femoris", "iliopsoas"])) {
+    return makeRegion(`${prefix}:muschii-soldului`, "Mușchii șoldului");
+  }
+
+  return undefined;
+}
 
 // ----- Female (simple skeleton GLB) -----------------------------------------
 
@@ -260,6 +375,7 @@ interface ComplexMaleProps {
 function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: ComplexMaleProps) {
   const gltf = useLoader(GLTFLoader, url);
   const groupRef = useRef<THREE.Group>(null);
+  const layersRef = useRef(layers);
 
   const { cloned, layerMeshes } = useMemo(() => {
     const root = gltf.scene.clone(true);
@@ -284,6 +400,14 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
       mesh.userData.selectionId = structureId;
       mesh.userData.selectionLabel = structureName;
       mesh.userData.selectionLabelEn = structureNameEn;
+      const intuitiveRegion = inferIntuitiveRegion({
+        tissue,
+        id: structureId,
+        label: structureName,
+        labelEn: structureNameEn,
+      });
+      mesh.userData.selectionRegionId = intuitiveRegion?.regionId;
+      mesh.userData.selectionRegionLabel = intuitiveRegion?.regionLabel;
 
       const baseColor =
         tissue === "os"
@@ -316,10 +440,18 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
 
   // Apply layer visibility
   useEffect(() => {
+    layersRef.current = layers;
     layerMeshes.os.forEach((m) => (m.visible = layers.skeleton));
     layerMeshes.muschi.forEach((m) => (m.visible = layers.muscles));
     layerMeshes.tendon.forEach((m) => (m.visible = layers.tendons));
   }, [layers, layerMeshes]);
+
+  useEffect(() => {
+    if (selection?.side !== "male") return;
+    if (!isTissueLayerActive(selection.tissue, layers)) {
+      onSelect(null);
+    }
+  }, [layers, onSelect, selection]);
 
   // Center & scale to a calm anatomy-viewer size without changing the authored orientation.
   const { scale, offset } = useMemo(() => {
@@ -346,11 +478,13 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
       const baseOpacity = (mat.userData.baseOpacity as number | undefined) ?? mat.opacity;
       const tissue = mesh.userData.tissue as TissueType;
       const selectionId = mesh.userData.selectionId as string | undefined;
+      const selectionRegionId = mesh.userData.selectionRegionId as string | undefined;
 
       const isSelected =
         selection !== null &&
         selection.side === "male" &&
-        selection.id === selectionId;
+        (selection.id === selectionId ||
+          (!!selection.regionId && selection.regionId === selectionRegionId));
       const isHov =
         !!selectionId &&
         hovered !== null &&
@@ -389,8 +523,19 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
 
   const handlePointerOver = (e: ThreeEvent<PointerEvent>) => {
     e.stopPropagation();
-    const mesh = e.object as THREE.Mesh;
-    if (!mesh.userData?.selectionId) return;
+    const mesh =
+      e.intersections
+        .map((intersection) => intersection.object as THREE.Mesh)
+        .filter((candidate) => {
+          const tissue = candidate.userData?.tissue as TissueType | undefined;
+          return !!candidate.userData?.selectionId && isTissueLayerActive(tissue, layersRef.current);
+        })
+        .sort(
+          (a, b) =>
+            tissuePriority(a.userData?.tissue as TissueType | undefined) -
+            tissuePriority(b.userData?.tissue as TissueType | undefined),
+        )[0] ?? null;
+    if (!mesh) return;
     hoveredMeshRef.current = mesh;
     document.body.style.cursor = "pointer";
   };
@@ -401,13 +546,35 @@ function ComplexMaleModel({ url, xOffset, layers, selection, onSelect }: Complex
   };
   const handleClick = (e: ThreeEvent<MouseEvent>) => {
     e.stopPropagation();
-    const mesh = e.object as THREE.Mesh;
+    const mesh =
+      e.intersections
+        .map((intersection) => intersection.object as THREE.Mesh)
+        .filter((candidate) => {
+          const tissue = candidate.userData?.tissue as TissueType | undefined;
+          return !!candidate.userData?.selectionId && isTissueLayerActive(tissue, layersRef.current);
+        })
+        .sort(
+          (a, b) =>
+            tissuePriority(a.userData?.tissue as TissueType | undefined) -
+            tissuePriority(b.userData?.tissue as TissueType | undefined),
+        )[0] ?? null;
+    if (!mesh) return;
     const tissue = mesh.userData?.tissue as TissueType | undefined;
     const id = mesh.userData?.selectionId as string | undefined;
     const label = mesh.userData?.selectionLabel as string | undefined;
     const labelEn = mesh.userData?.selectionLabelEn as string | undefined;
+    const regionId = mesh.userData?.selectionRegionId as string | undefined;
+    const regionLabel = mesh.userData?.selectionRegionLabel as string | undefined;
     if (!tissue || !id) return;
-    onSelect({ id, side: "male", tissue, label, labelEn });
+    onSelect({
+      id,
+      side: "male",
+      tissue,
+      regionId,
+      regionLabel,
+      label: regionLabel ?? label,
+      labelEn,
+    });
   };
 
   return (
@@ -469,10 +636,10 @@ export function SkeletonScene({ selection, onSelect, layers, mode }: SkeletonSce
       gl={{ antialias: true, alpha: true }}
       onPointerMissed={() => onSelect(null)}
     >
-      <color attach="background" args={["#ffffff"]} />
-      <fog attach="fog" args={["#ffffff", 10, 22]} />
+      <color attach="background" args={["#f5f2f7"]} />
+      <fog attach="fog" args={["#ebe4f1", 10, 22]} />
 
-      <hemisphereLight args={["#ffffff", "#d9e4ef", 1.05]} />
+      <hemisphereLight args={["#ffffff", "#d8c9e8", 1.05]} />
       <ambientLight intensity={0.55} />
       <directionalLight
         position={[5, 8, 7]}
@@ -483,8 +650,8 @@ export function SkeletonScene({ selection, onSelect, layers, mode }: SkeletonSce
         shadow-bias={-0.0005}
       />
       <directionalLight position={[-5, 5, 5]} intensity={0.55} color="#ffffff" />
-      <directionalLight position={[0, 4, -8]} intensity={0.7} color="#eaf2ff" />
-      <pointLight position={[0, 2.5, 5]} intensity={0.22} color="#ffffff" />
+      <directionalLight position={[0, 4, -8]} intensity={0.7} color="#e8dff3" />
+      <pointLight position={[0, 2.5, 5]} intensity={0.24} color="#f4d9ea" />
 
       <Suspense fallback={<LoadingFallback />}>
         {mode === "complex" ? (
